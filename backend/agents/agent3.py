@@ -11,7 +11,7 @@ def agent3(message):
     try:
         # Using llama3 model which is good for precise calculations
         llm = Ollama(
-            model="llama3",
+            model="mistral",
             base_url="http://localhost:11434",
             temperature=0.1,  # Very low temperature for precise calculations
             timeout=30

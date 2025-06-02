@@ -11,7 +11,7 @@ def agent2(message):
     try:
         # Using codestral model which is good for code generation
         llm = Ollama(
-            model="codestral",
+            model="mistral",
             base_url="http://localhost:11434",
             temperature=0.3,  # Lower temperature for more precise SQL generation
             timeout=30
