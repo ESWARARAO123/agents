@@ -12,7 +12,7 @@ import {
 } from '@mui/material';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8001';
 
 function App() {
   const [message, setMessage] = useState('');
@@ -70,7 +70,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 10000 // 10 second timeout
+        timeout: 60000 // Increased timeout to 60 seconds for Ollama responses
       });
       
       console.log('Received response:', result.data);
@@ -83,9 +83,13 @@ function App() {
       if (error.response) {
         errorMessage += error.response.data.detail || `Server responded with: ${error.response.status}`;
       } else if (error.request) {
-        errorMessage += 'No response received from server. Please check if the backend server is running.';
-        // Try to reconnect to server
-        checkServerStatus();
+        if (error.code === 'ECONNABORTED') {
+          errorMessage = 'The request took too long to complete. The AI model might be busy. Please try again in a few moments.';
+        } else {
+          errorMessage += 'No response received from server. Please check if the backend server is running.';
+          // Try to reconnect to server
+          checkServerStatus();
+        }
       } else {
         errorMessage += error.message;
       }

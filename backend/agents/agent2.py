@@ -1,33 +1,43 @@
-import re
+from langchain_community.llms import Ollama
+import logging
+
+logger = logging.getLogger(__name__)
 
 def agent2(message):
     """
-    SQL Query Generator Agent
-    Converts natural language to SQL queries
+    SQL Query Generator Agent using Ollama
+    Converts natural language to SQL queries using the codestral model
     """
-    # Convert to lowercase for easier matching
-    message = message.lower()
-    
-    # Basic patterns for common SQL operations
-    select_pattern = r"show|get|list|display|select|find"
-    from_pattern = r"from|in|of"
-    where_pattern = r"where|with|having|that|which"
-    
-    # Extract table name
-    table_match = re.search(rf"{from_pattern}\s+(\w+)", message)
-    table_name = table_match.group(1) if table_match else "table_name"
-    
-    # Extract conditions
-    conditions = []
-    if re.search(where_pattern, message):
-        # Simple condition extraction
-        condition_match = re.search(rf"{where_pattern}\s+(.+)", message)
-        if condition_match:
-            conditions.append(condition_match.group(1))
-    
-    # Build the SQL query
-    query = f"SELECT * FROM {table_name}"
-    if conditions:
-        query += f" WHERE {' AND '.join(conditions)}"
-    
-    return f"Generated SQL Query:\n{query}"
+    try:
+        # Using codestral model which is good for code generation
+        llm = Ollama(
+            model="codestral",
+            base_url="http://localhost:11434",
+            temperature=0.3,  # Lower temperature for more precise SQL generation
+            timeout=30
+        )
+        
+        prompt = f"""Convert the following natural language request into a SQL query. 
+        Only return the SQL query without any explanation.
+        
+        Request: {message}
+        
+        SQL Query:"""
+        
+        logger.info(f"Sending SQL generation request to Ollama: {message}")
+        response = llm.invoke(prompt)
+        logger.info(f"Generated SQL query: {response}")
+        
+        # Clean up the response to ensure it's just the SQL query
+        response = response.strip()
+        if not response.lower().startswith(('select', 'insert', 'update', 'delete', 'create')):
+            return "I apologize, but I couldn't generate a valid SQL query. Please try rephrasing your request."
+            
+        return f"Generated SQL Query:\n{response}"
+    except Exception as e:
+        error_message = str(e)
+        logger.error(f"SQL generation error: {error_message}")
+        
+        if "connection" in error_message.lower():
+            return "I apologize, but I'm unable to connect to the Ollama service. Please make sure Ollama is running on your system."
+        return f"I apologize, but I encountered an error while generating the SQL query: {error_message}"
