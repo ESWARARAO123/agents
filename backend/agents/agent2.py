@@ -1,43 +1,51 @@
 from langchain_community.llms import Ollama
+from memory.episodic_memory import PostgresMemory
 import logging
+from .config import OLLAMA_MODEL, OLLAMA_BASE_URL, OLLAMA_TEMPERATURE, OLLAMA_TIMEOUT
 
 logger = logging.getLogger(__name__)
+memory = PostgresMemory()
 
-def agent2(message):
+def agent2(message, session_id="default"):
     """
-    SQL Query Generator Agent using Ollama
-    Converts natural language to SQL queries using the codestral model
+    Helpful Assistant Agent using Ollama with episodic memory and recall
     """
     try:
-        # Using codestral model which is good for code generation
+        if message.strip().lower() == "test":
+            llm = Ollama(
+                model=OLLAMA_MODEL,
+                base_url=OLLAMA_BASE_URL,
+                temperature=OLLAMA_TEMPERATURE,
+                timeout=OLLAMA_TIMEOUT
+            )
+            prompt = f"You are Agent 2, a helpful assistant. Respond to the following:\n\nUser: {message}\nAssistant:"
+            response = llm.invoke(prompt)
+            return response.strip()
+
+        relevant_history = memory.get_relevant_history(session_id, message)
+        history_text = ""
+        if relevant_history:
+            history_text = "\n".join(
+                [f"{role.capitalize()}: {msg}" for role, msg, _ in reversed(relevant_history)]
+            )
+
         llm = Ollama(
-            model="mistral",
-            base_url="http://localhost:11434",
-            temperature=0.3,  # Lower temperature for more precise SQL generation
-            timeout=30
+            model=OLLAMA_MODEL,
+            base_url=OLLAMA_BASE_URL,
+            temperature=OLLAMA_TEMPERATURE,
+            timeout=OLLAMA_TIMEOUT
         )
-        
-        prompt = f"""Convert the following natural language request into a SQL query. 
-        Only return the SQL query without any explanation.
-        
-        Request: {message}
-        
-        SQL Query:"""
-        
-        logger.info(f"Sending SQL generation request to Ollama: {message}")
+        prompt = f"""You are Agent 2, a helpful assistant. Here is some relevant past conversation for context:
+{history_text}
+
+Now, provide a helpful and clear answer to the user's message.
+
+User: {message}
+Assistant:"""
         response = llm.invoke(prompt)
-        logger.info(f"Generated SQL query: {response}")
-        
-        # Clean up the response to ensure it's just the SQL query
-        response = response.strip()
-        if not response.lower().startswith(('select', 'insert', 'update', 'delete', 'create')):
-            return "I apologize, but I couldn't generate a valid SQL query. Please try rephrasing your request."
-            
-        return f"Generated SQL Query:\n{response}"
+        agent_response = response.strip()
+        return agent_response
+
     except Exception as e:
-        error_message = str(e)
-        logger.error(f"SQL generation error: {error_message}")
-        
-        if "connection" in error_message.lower():
-            return "I apologize, but I'm unable to connect to the Ollama service. Please make sure Ollama is running on your system."
-        return f"I apologize, but I encountered an error while generating the SQL query: {error_message}"
+        agent_response = f"Agent2 encountered an error processing your request: {str(e)}"
+        return agent_response

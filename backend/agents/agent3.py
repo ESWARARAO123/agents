@@ -1,50 +1,65 @@
 from langchain_community.llms import Ollama
+from memory.episodic_memory import PostgresMemory
 import logging
+from .config import OLLAMA_MODEL, OLLAMA_BASE_URL, OLLAMA_TEMPERATURE, OLLAMA_TIMEOUT
 
 logger = logging.getLogger(__name__)
+memory = PostgresMemory()
 
-def agent3(message):
+def agent3(message, session_id="default"):
     """
-    Calculator Agent using Ollama
-    Performs mathematical calculations using the llama3 model
+    Calculator Agent using Ollama with episodic memory and recall
     """
     try:
-        # Using llama3 model which is good for precise calculations
+        if message.strip().lower() == "test":
+            llm = Ollama(
+                model=OLLAMA_MODEL,
+                base_url=OLLAMA_BASE_URL,
+                temperature=OLLAMA_TEMPERATURE,
+                timeout=OLLAMA_TIMEOUT
+            )
+            prompt = f"Solve the following mathematical expression:\n\nExpression: {message}\n\nResult:"
+            response = llm.invoke(prompt)
+            return response.strip()
+
+        relevant_history = memory.get_relevant_history(session_id, message)
+        history_text = ""
+        if relevant_history:
+            history_text = "\n".join(
+                [f"{role.capitalize()}: {msg}" for role, msg, _ in reversed(relevant_history)]
+            )
+
         llm = Ollama(
-            model="mistral",
-            base_url="http://localhost:11434",
-            temperature=0.1,  # Very low temperature for precise calculations
-            timeout=30
+            model=OLLAMA_MODEL,
+            base_url=OLLAMA_BASE_URL,
+            temperature=OLLAMA_TEMPERATURE,
+            timeout=OLLAMA_TIMEOUT
         )
-        
-        prompt = f"""Solve the following mathematical expression. 
-        Only return the final numerical result without any explanation.
-        If the expression is not a valid mathematical calculation, respond with "Invalid calculation".
-        
-        Expression: {message}
-        
-        Result:"""
-        
-        logger.info(f"Sending calculation request to Ollama: {message}")
+        prompt = f"""Solve the following mathematical expression. Here is some relevant past conversation for context:
+{history_text}
+
+Only return the final numerical result without any explanation.
+If the expression is not a valid mathematical calculation, respond with "Invalid calculation".
+
+Expression: {message}
+
+Result:"""
         response = llm.invoke(prompt)
-        logger.info(f"Calculation result: {response}")
-        
-        # Clean up the response
         response = response.strip()
-        
-        # Check if the response is a valid number
         try:
             result = float(response)
-            return f"Result: {result}"
+            agent_response = f"Result: {result}"
         except ValueError:
             if "invalid" in response.lower():
-                return "I apologize, but I couldn't perform the calculation. Please provide a valid mathematical expression."
-            return f"Calculation result: {response}"
-            
+                agent_response = "I apologize, but I couldn't perform the calculation. Please provide a valid mathematical expression."
+            else:
+                agent_response = f"Calculation result: {response}"
+        return agent_response
+
     except Exception as e:
         error_message = str(e)
-        logger.error(f"Calculation error: {error_message}")
-        
         if "connection" in error_message.lower():
-            return "I apologize, but I'm unable to connect to the Ollama service. Please make sure Ollama is running on your system."
-        return f"I apologize, but I encountered an error while performing the calculation: {error_message}"
+            agent_response = "I apologize, but I'm unable to connect to the Ollama service. Please make sure Ollama is running on your system."
+        else:
+            agent_response = f"I apologize, but I encountered an error while performing the calculation: {error_message}"
+        return agent_response
